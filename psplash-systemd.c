@@ -131,10 +131,12 @@ int get_progress()
 {
 	sd_bus_error error = SD_BUS_ERROR_NULL;
 	static double current_progress = 0;
-	double progress = 0;
+    static bool first_boot_message_displayed = 0;
+    static char* first_boot_command = "MSG Installing the system. This may take 15 minutes.";
+    double progress = 0;
 	sd_bus *bus = NULL;
 	int r;
-	char buffer[20];
+	char buffer[64];
 	int len;
 
         /* Connect to the system bus */
@@ -192,6 +194,10 @@ int get_progress()
 	} else {
 		goto finish;
 	}
+
+    if (!first_boot_message_displayed) {
+      len = write(pipe_fd, first_boot_command, strlen(first_boot_command) + 1);
+    }
 
 	if (check_if_screenly_client_is_installed() != -1) {
 		print_log(stdout, "system is fully booted and screenly-client is installed\n");
