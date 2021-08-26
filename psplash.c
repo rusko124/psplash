@@ -112,8 +112,16 @@ parse_command (PSplashFB *fb, char *string)
     {
       char *arg = strtok(NULL, "\0");
 
-      if (arg)
-        psplash_draw_progress (fb, atoi(arg));
+      if (arg) {
+         psplash_fb_draw_image (fb,
+           (fb->width  - CORE_IMG_WIDTH)/2,
+           (fb->height - CORE_IMG_HEIGHT)/2,
+           CORE_IMG_WIDTH,
+           CORE_IMG_HEIGHT,
+           CORE_IMG_BYTES_PER_PIXEL,
+           CORE_IMG_ROWSTRIDE,
+           CORE_IMG_RLE_PIXEL_DATA);
+      }
     } 
   else if (!strcmp(command,"MSG")) 
     {
@@ -296,32 +304,14 @@ main (int argc, char** argv)
   psplash_fb_draw_rect (fb, 0, 0, fb->width, fb->height,
                         PSPLASH_BACKGROUND_COLOR);
 
-  /* Draw the Poky logo  */
-  psplash_fb_draw_image (fb, 
-			 (fb->width  - POKY_IMG_WIDTH)/2, 
-#if PSPLASH_IMG_FULLSCREEN
-			 (fb->height - POKY_IMG_HEIGHT)/2,
-#else
-			 (fb->height * PSPLASH_IMG_SPLIT_NUMERATOR
-			  / PSPLASH_IMG_SPLIT_DENOMINATOR - POKY_IMG_HEIGHT)/2,
-#endif
-			 POKY_IMG_WIDTH,
-			 POKY_IMG_HEIGHT,
-			 POKY_IMG_BYTES_PER_PIXEL,
-			 POKY_IMG_ROWSTRIDE,
-			 POKY_IMG_RLE_PIXEL_DATA);
-
-  /* Draw progress bar border */
-  psplash_fb_draw_image (fb, 
-			 (fb->width  - BAR_IMG_WIDTH)/2, 
-			 SPLIT_LINE_POS(fb),
-			 BAR_IMG_WIDTH,
-			 BAR_IMG_HEIGHT,
-			 BAR_IMG_BYTES_PER_PIXEL,
-			 BAR_IMG_ROWSTRIDE,
-			 BAR_IMG_RLE_PIXEL_DATA);
-
-  psplash_draw_progress (fb, 0);
+ psplash_fb_draw_image (fb,
+           (fb->width  - CORE_IMG_WIDTH)/2,
+           (fb->height - CORE_IMG_HEIGHT)/2,
+           CORE_IMG_WIDTH,
+           CORE_IMG_HEIGHT,
+           CORE_IMG_BYTES_PER_PIXEL,
+           CORE_IMG_ROWSTRIDE,
+           CORE_IMG_RLE_PIXEL_DATA);
 
 #ifdef PSPLASH_STARTUP_MSG
   psplash_draw_msg (fb, PSPLASH_STARTUP_MSG);
