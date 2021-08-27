@@ -13,7 +13,7 @@
 
 /* Text to output on program start; if undefined, output nothing */
 #ifndef PSPLASH_DISABLE_STARTUP_MSG
-#define PSPLASH_STARTUP_MSG ""
+#define PSPLASH_STARTUP_MSG "Test message"
 #endif
 
 /* Bool indicating if the image is fullscreen, as opposed to split screen */

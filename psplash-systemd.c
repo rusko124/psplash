@@ -132,7 +132,7 @@ int get_progress()
 	sd_bus_error error = SD_BUS_ERROR_NULL;
 	static double current_progress = 0;
     static bool first_boot_message_displayed = 0;
-    static char* first_boot_command = "MSG Installing the system. This may take 15 minutes.";
+    static char* first_boot_command = "MSG Installing";
     double progress = 0;
 	sd_bus *bus = NULL;
 	int r;
@@ -172,6 +172,11 @@ int get_progress()
 		goto finish;
 	}
 
+    if (!first_boot_message_displayed) {
+      write(pipe_fd, first_boot_command, strlen(first_boot_command) + 1);
+      first_boot_message_displayed = 1;
+    }
+
 	/*
 	 * Systemd's progress seems go backwards at times. Prevent that
 	 * progress bar on psplash goes backward by just communicating the
@@ -195,9 +200,6 @@ int get_progress()
 		goto finish;
 	}
 
-    if (!first_boot_message_displayed) {
-      len = write(pipe_fd, first_boot_command, strlen(first_boot_command) + 1);
-    }
 
 	if (check_if_screenly_client_is_installed() != -1) {
 		print_log(stdout, "system is fully booted and screenly-client is installed\n");
