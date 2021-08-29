@@ -1,9 +1,9 @@
-/* 
- *  pslash - a lightweight framebuffer splashscreen for embedded devices. 
+/*
+ *  pslash - a lightweight framebuffer splashscreen for embedded devices.
  *
  *  Copyright (c) 2006 Matthew Allum <mallum@o-hand.com>
  *
- *  Parts of this file ( fifo handling ) based on 'usplash' copyright 
+ *  Parts of this file ( fifo handling ) based on 'usplash' copyright
  *  Matthew Garret.
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -19,6 +19,8 @@
 #include <systemd/sd-daemon.h>
 #endif
 #include FONT_HEADER
+
+const char* FIRST_TIME_BOOT_MESSAGE = "Setting up. This takes up to 15 minutes.";
 
 #define SPLIT_LINE_POS(fb)                                  \
 	(  (fb)->height                                     \
@@ -46,15 +48,15 @@ psplash_draw_msg (PSplashFB *fb, const char *msg)
 
   /* Clear */
 
-  psplash_fb_draw_rect (fb, 
-			0, 
-			SPLIT_LINE_POS(fb) - h, 
+  psplash_fb_draw_rect (fb,
+			0,
+			SPLIT_LINE_POS(fb) - h,
 			fb->width,
 			h,
 			PSPLASH_BACKGROUND_COLOR);
 
   psplash_fb_draw_text (fb,
-			(fb->width-w)/2, 
+			(fb->width-w)/2,
 			SPLIT_LINE_POS(fb) - h,
 			PSPLASH_TEXT_COLOR,
 			&FONT_DEF,
@@ -69,13 +71,13 @@ psplash_draw_progress (PSplashFB *fb, int value)
   /* 4 pix border */
   x      = ((fb->width  - BAR_IMG_WIDTH)/2) + 4 ;
   y      = SPLIT_LINE_POS(fb) + 4;
-  width  = BAR_IMG_WIDTH - 8; 
+  width  = BAR_IMG_WIDTH - 8;
   height = BAR_IMG_HEIGHT - 8;
 
   if (value > 0)
     {
       barwidth = (CLAMP(value,0,100) * width) / 100;
-      psplash_fb_draw_rect (fb, x + barwidth, y, 
+      psplash_fb_draw_rect (fb, x + barwidth, y,
     			width - barwidth, height,
 			PSPLASH_BAR_BACKGROUND_COLOR);
       psplash_fb_draw_rect (fb, x, y, barwidth,
@@ -84,7 +86,7 @@ psplash_draw_progress (PSplashFB *fb, int value)
   else
     {
       barwidth = (CLAMP(-value,0,100) * width) / 100;
-      psplash_fb_draw_rect (fb, x, y, 
+      psplash_fb_draw_rect (fb, x, y,
     			width - barwidth, height,
 			PSPLASH_BAR_BACKGROUND_COLOR);
       psplash_fb_draw_rect (fb, x + width - barwidth,
@@ -92,23 +94,23 @@ psplash_draw_progress (PSplashFB *fb, int value)
 			    PSPLASH_BAR_COLOR);
     }
 
-  DBG("value: %i, width: %i, barwidth :%i\n", value, 
+  DBG("value: %i, width: %i, barwidth :%i\n", value,
 		width, barwidth);
 }
 
-static int 
+static int
 parse_command (PSplashFB *fb, char *string)
 {
   char *command;
 
   DBG("got cmd %s", string);
-	
+
   if (strcmp(string,"QUIT") == 0)
     return 1;
 
   command = strtok(string," ");
 
-  if (!strcmp(command,"PROGRESS")) 
+  if (!strcmp(command,"PROGRESS"))
     {
       char *arg = strtok(NULL, "\0");
 
@@ -122,15 +124,15 @@ parse_command (PSplashFB *fb, char *string)
            CORE_IMG_ROWSTRIDE,
            CORE_IMG_RLE_PIXEL_DATA);
       }
-    } 
-  else if (!strcmp(command,"MSG")) 
+    }
+  else if (!strcmp(command,"MSG"))
     {
       char *arg = strtok(NULL, "\0");
 
       if (arg)
         psplash_draw_msg (fb, arg);
-    } 
-  else if (!strcmp(command,"QUIT")) 
+    }
+  else if (!strcmp(command,"QUIT"))
     {
       return 1;
     }
@@ -139,8 +141,8 @@ parse_command (PSplashFB *fb, char *string)
   return 0;
 }
 
-void 
-psplash_main (PSplashFB *fb, int pipe_fd, int timeout) 
+void
+psplash_main (PSplashFB *fb, int pipe_fd, int timeout)
 {
   int            err;
   ssize_t        length = 0;
@@ -158,14 +160,14 @@ psplash_main (PSplashFB *fb, int pipe_fd, int timeout)
 
   end = command;
 
-  while (1) 
+  while (1)
     {
-      if (timeout != 0) 
+      if (timeout != 0)
 	err = select(pipe_fd+1, &descriptors, NULL, NULL, &tv);
       else
 	err = select(pipe_fd+1, &descriptors, NULL, NULL, NULL);
-      
-      if (err <= 0) 
+
+      if (err <= 0)
 	{
 	  /*
 	  if (errno == EINTR)
@@ -173,10 +175,10 @@ psplash_main (PSplashFB *fb, int pipe_fd, int timeout)
 	  */
 	  return;
 	}
-      
+
       length += read (pipe_fd, end, sizeof(command) - (end - command));
 
-      if (length == 0) 
+      if (length == 0)
 	{
 	  /* Reopen to see if there's anything more for us */
 	  close(pipe_fd);
@@ -212,10 +214,10 @@ psplash_main (PSplashFB *fb, int pipe_fd, int timeout)
 
     out:
       end = &command[length];
-    
+
       tv.tv_sec = timeout;
       tv.tv_usec = 0;
-      
+
       FD_ZERO(&descriptors);
       FD_SET(pipe_fd,&descriptors);
     }
@@ -223,8 +225,13 @@ psplash_main (PSplashFB *fb, int pipe_fd, int timeout)
   return;
 }
 
-int 
-main (int argc, char** argv) 
+bool
+is_first_boot() {
+
+}
+
+int
+main (int argc, char** argv)
 {
   char      *rundir;
   int        pipe_fd, i = 0, angle = 0, fbdev_id = 0, ret = 0;
@@ -257,8 +264,8 @@ main (int argc, char** argv)
       }
 
     fail:
-      fprintf(stderr, 
-              "Usage: %s [-n|--no-console-switch][-a|--angle <0|90|180|270>][-f|--fbdev <0..9>]\n", 
+      fprintf(stderr,
+              "Usage: %s [-n|--no-console-switch][-a|--angle <0|90|180|270>][-f|--fbdev <0..9>]\n",
               argv[0]);
       exit(-1);
   }
@@ -272,7 +279,7 @@ main (int argc, char** argv)
 
   if (mkfifo(PSPLASH_FIFO, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP))
     {
-      if (errno!=EEXIST) 
+      if (errno!=EEXIST)
 	    {
 	      perror("mkfifo");
 	      exit(-1);
@@ -280,8 +287,8 @@ main (int argc, char** argv)
     }
 
   pipe_fd = open (PSPLASH_FIFO,O_RDONLY|O_NONBLOCK);
-  
-  if (pipe_fd==-1) 
+
+  if (pipe_fd==-1)
     {
       perror("pipe open");
       exit(-2);
@@ -304,7 +311,7 @@ main (int argc, char** argv)
   psplash_fb_draw_rect (fb, 0, 0, fb->width, fb->height,
                         PSPLASH_BACKGROUND_COLOR);
 
- psplash_fb_draw_image (fb,
+  psplash_fb_draw_image (fb,
            (fb->width  - CORE_IMG_WIDTH)/2,
            (fb->height - CORE_IMG_HEIGHT)/2,
            CORE_IMG_WIDTH,
@@ -313,9 +320,16 @@ main (int argc, char** argv)
            CORE_IMG_ROWSTRIDE,
            CORE_IMG_RLE_PIXEL_DATA);
 
-#ifdef PSPLASH_STARTUP_MSG
-  psplash_draw_msg (fb, PSPLASH_STARTUP_MSG);
-#endif
+  FILE *cmdline_file = fopen("/proc/cmdline", "r");
+  if (cmdline_file) {
+    const char* first_boot_marker = "snapd_recovery_mode=install";
+    char cmdline[1024];
+    char* result = fgets(cmdline, 1024, cmdline_file);
+    if (result && strstr(cmdline, first_boot_marker) != NULL) {
+      psplash_draw_msg (fb, cmdline);
+    }
+    fclose(cmdline_file);
+  }
 
   /* Scene set so let's flip the buffers. */
   /* The first time we also synchronize the buffers so we can build on an

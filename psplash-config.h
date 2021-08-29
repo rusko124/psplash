@@ -12,9 +12,7 @@
 #define _HAVE_PSPLASH_CONFIG_H
 
 /* Text to output on program start; if undefined, output nothing */
-#ifndef PSPLASH_DISABLE_STARTUP_MSG
-#define PSPLASH_STARTUP_MSG "Test message"
-#endif
+#define PSPLASH_STARTUP_MSG "Setting up the system. This might take up to 15 minutes."
 
 /* Bool indicating if the image is fullscreen, as opposed to split screen */
 #ifndef PSPLASH_IMG_FULLSCREEN
