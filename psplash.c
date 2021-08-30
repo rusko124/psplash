@@ -15,12 +15,11 @@
 #include "psplash-colors.h"
 #include "psplash-poky-img.h"
 #include "psplash-bar-img.h"
+#include <stdlib.h>
 #ifdef HAVE_SYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
 #include FONT_HEADER
-
-const char* FIRST_TIME_BOOT_MESSAGE = "Setting up. This takes up to 15 minutes.";
 
 #define SPLIT_LINE_POS(fb)                                  \
 	(  (fb)->height                                     \
@@ -115,14 +114,7 @@ parse_command (PSplashFB *fb, char *string)
       char *arg = strtok(NULL, "\0");
 
       if (arg) {
-         psplash_fb_draw_image (fb,
-           (fb->width  - CORE_IMG_WIDTH)/2,
-           (fb->height - CORE_IMG_HEIGHT)/2,
-           CORE_IMG_WIDTH,
-           CORE_IMG_HEIGHT,
-           CORE_IMG_BYTES_PER_PIXEL,
-           CORE_IMG_ROWSTRIDE,
-           CORE_IMG_RLE_PIXEL_DATA);
+         psplash_draw_progress(fb, atoi(arg));
       }
     }
   else if (!strcmp(command,"MSG"))
@@ -319,17 +311,6 @@ main (int argc, char** argv)
            CORE_IMG_BYTES_PER_PIXEL,
            CORE_IMG_ROWSTRIDE,
            CORE_IMG_RLE_PIXEL_DATA);
-
-  FILE *cmdline_file = fopen("/proc/cmdline", "r");
-  if (cmdline_file) {
-    const char* first_boot_marker = "snapd_recovery_mode=install";
-    char cmdline[1024];
-    char* result = fgets(cmdline, 1024, cmdline_file);
-    if (result && strstr(cmdline, first_boot_marker) != NULL) {
-      psplash_draw_msg (fb, cmdline);
-    }
-    fclose(cmdline_file);
-  }
 
   /* Scene set so let's flip the buffers. */
   /* The first time we also synchronize the buffers so we can build on an

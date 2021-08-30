@@ -26,6 +26,7 @@
 #include <netdb.h>
 #include <sys/un.h>
 
+#define RESULT_BUFFER_SIZE 2048
 #define PSPLASH_UPDATE_USEC 1000000
 // maximum wait multiplier of average delay to wait for next psplash-systemd
 #define PSPLASH_MAX_WAIT_MULTIPLIER 12
@@ -34,6 +35,8 @@
 #define SYSROOT_DIR "/run/systemd/system"
 #define PSPLASH_SYSTEMD_SERVICE "psplash-systemd.service"
 #define BASIC_TARGET_WANTS "basic.target.wants"
+const char *FIRST_TIME_BOOT_COMMAND =
+    "MSG Setting up. This takes up to 15 minutes.";
 
 typedef uint64_t usec_t;
 
@@ -68,6 +71,54 @@ void do_print_log(FILE *stream, const char *fmt, ...) {
 	}
 	fprintf(stream, "%s", str);
 	free(str);
+}
+
+int check_if_seed_is_loaded() {
+	const char * const host = "/run/snapd.socket";
+	const char * const message = "GET /v2/snaps/system/conf?keys=seed.loaded HTTP/1.0\r\n\r\n";
+    static char output[1024];
+
+
+	const int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sockfd < 0) {
+      return -1;
+	}
+
+	struct sockaddr_un serv_addr = {0};
+	serv_addr.sun_family = AF_UNIX;
+	strncpy(serv_addr.sun_path, host, sizeof(serv_addr.sun_path) - 1);
+	int ret = connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr));
+	if (ret == -1) {
+		close(sockfd);
+	    return -1;
+	}
+
+	const int total = strlen(message);
+	int bytes, received;
+	int sent = 0;
+	do {
+      bytes = write(sockfd, message + sent, total - sent);
+      if (bytes < 0) {
+        close(sockfd);
+        return -1;
+      }
+
+      if (bytes == 0)
+        break;
+      sent += bytes;
+	} while (sent < total);
+
+    char response[RESULT_BUFFER_SIZE];
+	memset(response, 0, RESULT_BUFFER_SIZE);
+
+	received = 0;
+	const ssize_t bytes_read = recv(sockfd, response, RESULT_BUFFER_SIZE, MSG_CMSG_CLOEXEC);
+	if (bytes_read <= 0) {
+      close(sockfd);
+      return -1;
+	}
+
+	return strstr(response, "\"seed.loaded\":true") != NULL ? 1 : 0;
 }
 
 int check_if_screenly_client_is_installed() {
@@ -127,12 +178,40 @@ int check_if_screenly_client_is_installed() {
 	}
 }
 
+void display_first_time_boot_message(int pipe_fd) {
+  print_log(stdout, "The first phase of the first boot detected\n");
+  write(pipe_fd, FIRST_TIME_BOOT_COMMAND, strlen(FIRST_TIME_BOOT_COMMAND) + 1);
+}
+
+bool is_snapd_mode_install() {
+  static const char* first_boot_marker = "snapd_recovery_mode=install";
+  static const unsigned int buffer_size = 1024;
+
+  FILE *cmdline_file = fopen("/proc/cmdline", "r");
+  if (cmdline_file == NULL) {
+    print_log(stdout, "Cannot open cmdline file\n");
+    return 0;
+  }
+
+  char cmdline[buffer_size];
+  char* result = fgets(cmdline, buffer_size, cmdline_file);
+  fclose(cmdline_file);
+
+  if (result == NULL) {
+    print_log(stdout, "Cannot read cmdline file\n");
+    return 0;
+  }
+
+  return strstr(cmdline, first_boot_marker) != NULL;
+}
+
+
 int get_progress()
 {
 	sd_bus_error error = SD_BUS_ERROR_NULL;
 	static double current_progress = 0;
-    static bool first_boot_message_displayed = 0;
-    static char* first_boot_command = "MSG Installing";
+    static bool first_boot_messaged_displayed = 0;
+
     double progress = 0;
 	sd_bus *bus = NULL;
 	int r;
@@ -172,11 +251,21 @@ int get_progress()
 		goto finish;
 	}
 
-    if (!first_boot_message_displayed) {
-      write(pipe_fd, first_boot_command, strlen(first_boot_command) + 1);
-      first_boot_message_displayed = 1;
-    }
+    if (!first_boot_messaged_displayed) {
+      if (is_snapd_mode_install()) {
+        display_first_time_boot_message(pipe_fd);
+        first_boot_messaged_displayed = 1;
+      } else {
+        int res = check_if_seed_is_loaded();
 
+        if (res == 0) {
+          display_first_time_boot_message(pipe_fd);
+          first_boot_messaged_displayed = 1;
+        } else if (res == 1) {
+          first_boot_messaged_displayed = 1;
+        }
+      }
+    }
 	/*
 	 * Systemd's progress seems go backwards at times. Prevent that
 	 * progress bar on psplash goes backward by just communicating the
@@ -187,8 +276,8 @@ int get_progress()
 
 	progress_weighted = progress_base + current_progress * progress_weight;
 	// print_log(stdout, "Progress: %f, weighted: %d\n", progress, progress_weighted);
-	len = snprintf(buffer, 20, "PROGRESS %d", progress_weighted);
-	len = write(pipe_fd, buffer, len + 1);
+	/* len = snprintf(buffer, 20, "PROGRESS %d", progress_weighted); */
+	/* len = write(pipe_fd, buffer, len + 1); */
 	int systemd_loaded = -1;
 	if (progress == 1.0) {
 		print_log(stdout, "Systemd reported progress of 1.0, quit monitoring loop\n");
@@ -199,7 +288,6 @@ int get_progress()
 	} else {
 		goto finish;
 	}
-
 
 	if (check_if_screenly_client_is_installed() != -1) {
 		print_log(stdout, "system is fully booted and screenly-client is installed\n");
@@ -274,8 +362,8 @@ void wait_for_next_monitor() {
 		}
                 progress_weighted += progress_increments;
 		// print_log(stdout, "Progress:           weighted: %d\n", progress_weighted);
-		len = snprintf(buffer, 20, "PROGRESS %d", progress_weighted);
-		len = write(pipe_fd, buffer, len + 1);
+		/* len = snprintf(buffer, 20, "PROGRESS %d", progress_weighted); */
+		/* len = write(pipe_fd, buffer, len + 1); */
 		sleep(1);
 	}
 }
@@ -489,32 +577,32 @@ int main(int argc, char *argv[]) {
 		goto finish;
 	}
 
-	env = getenv("PSPLASH_BASE");
-	if (env) {
-		progress_base = atoi(env);
-	}
-	env = getenv("PSPLASH_WEIGHT");
-	if (env) {
-		progress_weight = atoi(env);
-	}
-	if (!progress_weight) {
-		// if weight is 0 -> not defined -> default 100
-		// if base is not defined, it's correct to be 0
-		progress_weight =  100;
-	}
+  env = getenv("PSPLASH_BASE");
+  if (env) {
+    progress_base = atoi(env);
+  }
+  env = getenv("PSPLASH_WEIGHT");
+  if (env) {
+    progress_weight = atoi(env);
+  }
+  if (!progress_weight) {
+    // if weight is 0 -> not defined -> default 100
+    // if base is not defined, it's correct to be 0
+    progress_weight = 100;
+  }
 
-	r = do_main();
+  r = do_main();
 
 finish:
-	if (logfile)
-		fclose(logfile);
+  if (logfile)
+    fclose(logfile);
 
-	if (comm_file)
-		fclose(comm_file);
+  if (comm_file)
+    fclose(comm_file);
 
-	if (cleanup) {
-		// try to delete "flag" file, ignore error
-		remove(RUN_PSPLASH_SYSTEMD_FLAG);
-	}
-	return r;
+  if (cleanup) {
+    // try to delete "flag" file, ignore error
+    remove(RUN_PSPLASH_SYSTEMD_FLAG);
+  }
+  return r;
 }
