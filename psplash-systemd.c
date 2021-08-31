@@ -36,7 +36,7 @@
 #define PSPLASH_SYSTEMD_SERVICE "psplash-systemd.service"
 #define BASIC_TARGET_WANTS "basic.target.wants"
 const char *FIRST_TIME_BOOT_COMMAND =
-    "MSG Setting up. This takes up to 15 minutes.";
+    "MSG Setting up. This may take up to 15 minutes.";
 
 typedef uint64_t usec_t;
 
